@@ -23,11 +23,12 @@ uout = similar(uin)
 rand_J = rand(length(uin), length(uin))
 
 J = Ariadne.JacobianOperator(F!, uout, uin, semi)
+J_fast = Ariadne.JacobianOperator(F!, uout, uin, semi, assume_p_const = true)
 @time Ariadne.mul!(uout, J, uin)
 @time mul!(uout, rand_J, uin)
 
 du = copy(uout)
-Trixi.rhs!(du, uin, ode.p, ode.t)
+Trixi.rhs!(du, uin, ode.p, 0.0)
 res = copy(du)
 Δt = 0.1
 function axby!(res, a, x, b, y)
@@ -56,5 +57,19 @@ end
 M = LMOperator(J, Δt)
 Ariadne.krylov_solve!(workspace, M, res)
 
-@btime mul!($uout, $J, $uin);
+
+@time mul!(uout, J, uin);
+@time mul!(uout, J_fast, uin);
+@time Ariadne.krylov_solve!(workspace, M, res);
 @btime Ariadne.krylov_solve!($workspace, $M, $res);
+
+M_fast = LMOperator(J_fast, Δt);
+Trixi.rhs!(du, uin, ode.p, 0.0);
+res_fast = copy(du);
+kc_fast = Ariadne.KrylovConstructor(res_fast);
+workspace_fast = Ariadne.krylov_workspace(:gmres, kc_fast);
+@time Ariadne.krylov_solve!(workspace_fast, M_fast, res_fast);
+@btime Ariadne.krylov_solve!($workspace_fast, $M_fast, $res_fast);
+
+# @btime mul!($uout, $J, $uin);
+# @btime Ariadne.krylov_solve!($workspace, $M, $res);
